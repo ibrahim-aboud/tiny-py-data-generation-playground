@@ -273,6 +273,8 @@ def line_counter(code_snippet):
 
 
 def generate_stepped_operator_prediction_snippet(code_snippet, operator_dictionary,limit=0,sampling_limit=0):
+    # given a code snippet, return all possible training instances
+    # for the stepped operator prediction task, in a list
     code_snippet = code_snippet.strip('\n')
     # Prepare the execution environment by putting the code snippet inside a function and setting up a Python trace function
     indented = "\n".join([f"	{line}" for line in code_snippet.split("\n")])
