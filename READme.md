@@ -14,6 +14,22 @@
 - you can use that file as well when training and evaluating
 - for these modifications I am not quite sure if all necessary modifications are done "in other words not sure there are other things to modify or just these two file", so double checking is required.
 
+## notes regarding specific tasks
+
+#### stepped operator prediction
+
+step operator prediction works as follows :
+- from every "pure" snippet, we execute it and freeze at N random steps "the number of steps is set by the "sampling_limit" hyper parameter"
+- sampling_limit = 0 means that it freezes at every step
+- at a given frozen step, the states of variables are generated at that moment
+- for every frozen step, we try masking M possible operators, one at a time (M is set by the "limit" hyperparameter)
+- for each masking, we check whether the operator guessing is deterministic based on the variable states generated previously
+- every validated masking generates one training snippet
+- In a perfect world, sampling_limit*limit examples can be squeezed out of every pure snippets
+- But due to many of these examples being non deterministic, this number becomes more like an upper bound than an exact estimation
+- **REMEMBER TO SET THE SAMPLING_LIMIT VARIABLE TO A WEAK VALUE FOR DATASETS INCLUDING LOOPS (ex: 3 to 5), TO AVOID GENERATING A TRAINING SET THAT IS ORDERS OF MAGNITUDE BIGGER THAN THE ORIGINAL PURE DATASET, unless done on purpose**
+- the function that filters non-deterministic questions is not perfect, it offers 'weak conditions' to remove as much 'bad' snippets as possible.
+
 ## some extra stats
 
 I tried documentening the different execution times for each dataset generation.
@@ -34,4 +50,12 @@ estimated generation time : 6,000 snippets per second, 1 minute for 375k snippet
 
 ```
 estimated generation time : 10,000 snippets per second, 35 seconds for 375k snippets
+```
+
+#### stepped operator prediction
+
+
+```
+estimated generation time : 500 snippets per second, 12 minutes for 375k snippets**
+**extracted 3 sampled steps from each snippet
 ```
