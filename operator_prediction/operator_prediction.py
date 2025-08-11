@@ -9,6 +9,8 @@ from tqdm import tqdm
 #____________________Hyper Parameters________________________#
 source_file_path = "sample_snippets.txt"
 destination_file_path = "operator_prediction.txt"
+include_arithmetic_masking = True
+include_comparator_masking = False
 OPPOSITE_OPERATORS = {
     '<': '>',
     '>': '<',
@@ -131,9 +133,9 @@ def find_operators_to_replace(code_snippet):
     candidates = []
     for node in ast.walk(tree):
         if hasattr(node, 'lineno') and node.lineno in verified_lines:
-            if isinstance(node, ast.BinOp):
+            if isinstance(node, ast.BinOp) and include_arithmetic_masking:
                 candidates.append(node)
-            elif isinstance(node, ast.Compare):
+            elif isinstance(node, ast.Compare) and include_comparator_masking:
                 candidates.append(node)
 
     if not candidates:
