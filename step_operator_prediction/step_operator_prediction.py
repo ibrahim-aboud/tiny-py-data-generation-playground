@@ -14,6 +14,8 @@ source_file_path = "sample_snippets.txt"
 destination_file_path = "stepped_operator_prediction.txt"
 include_arithmetic_masking = True
 include_comparator_masking = False
+errored_snippets_are_non_deterministic = True
+different_step_answers_are_non_deterministic = True
 limit = 0 # How many operator masking cases to generate out of a single snippet step (0 means no limit)
 sampling_limit = 3 # how many random selected steps to generate out of each snippet (0 means no limit)
 # OPPOSITE_OPERATORS = { 
@@ -204,16 +206,17 @@ def get_variable_values_from_code_step(code_snippet,step,stack):
             "step": step,
         })
     except Exception as e:
-        return ''
+        return '', -1
 
     if len(trace) != 0:
-        return trace[0]
+        return trace[0], trace[1]
     else:
-        return ''
+        # the code exeuction did not reach the step
+        return '', -2
 
 
 
-def is_deterministic(code_snippet, column, line, new_operators, original_states, step, stack):
+def is_deterministic(code_snippet, column, line, new_operators, original_states, original_highlighted_line, step, stack):
     # given a code snippet, the old operator's location and the new operator
     # verify whether replacing the old operator with the new ones causes
     # a different execution outcome, if it does, this means that
@@ -221,9 +224,17 @@ def is_deterministic(code_snippet, column, line, new_operators, original_states,
     # multiple operators can lead to the same outcome, making the deterministic guess impossible
     for candidate_operator in new_operators:
         modified_code = replace_operator_with_symbol(code_snippet, column,line, candidate_operator)
-        modified_output = get_variable_values_from_code_step(modified_code,step,stack)
-        if modified_output == original_states:
+        modified_output, new_highlighted_line = get_variable_values_from_code_step(modified_code,step,stack)
+        if new_highlighted_line == -1 and errored_snippets_are_non_deterministic:
+            # case 1 : error while executing the new code
             return False
+        elif new_highlighted_line == -2 and different_step_answers_are_non_deterministic:
+            # case 2 : did not reach the number of steps required
+            return False
+        else:
+            # case 3 : the code reached the number of steps required and has actual variable states
+            if modified_output == original_states or new_highlighted_line != original_highlighted_line:
+                return False
     return True
 
 def replace_operator_with_symbol(code_snippet, op_col, op_line,symbol):
@@ -358,13 +369,14 @@ finally:
         if variable_states:
             for candidate in selected:
                 op, col, line = candidate
-                if (is_deterministic(code_snippet,col,line,operator_dictionary.get(op),variable_states,sample_line,stack)):
+                if (is_deterministic(code_snippet,col,line,operator_dictionary.get(op),variable_states,highlighted_line_nb,sample_line,stack)):
                     modified_code = replace_operator_with_symbol(code_snippet,col,line,'?')
                     modified_code_lines = modified_code.split('\n')
                     modified_code_lines[highlighted_line_nb] = "@" + modified_code_lines[highlighted_line_nb] + "$" + variable_states
                     modified_code = '\n'.join(modified_code_lines)
                     modified_code = modified_code + "\n# operator?" + op
                     code_snippets.append(modified_code)
+
 
         total_snippets.extend(code_snippets)
     
