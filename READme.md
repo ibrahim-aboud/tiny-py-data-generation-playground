@@ -29,6 +29,8 @@ step operator prediction works as follows :
 - But due to many of these examples being non deterministic, this number becomes more like an upper bound than an exact estimation
 - **REMEMBER TO SET THE sampling_limit VARIABLE TO A WEAK VALUE FOR DATASETS INCLUDING LOOPS (ex: 3 to 5), TO AVOID GENERATING A TRAINING SET THAT IS ORDERS OF MAGNITUDE BIGGER THAN THE ORIGINAL PURE DATASET, unless done on purpose**
 - the function that filters non-deterministic questions is not perfect, it offers 'weak conditions' to remove as much 'bad' snippets as possible.
+- the errored_snippets_are_non_deterministic flag is used to whether ignore or not any code snippets that might raise exeuction errors if the masked operator is replaced with an operator other than the original.
+- different_step_answers_are_non_deterministic flag is used to whether ignore or not any code snippet whose execution might not end in the same step if the masked operator is replaced with an operator other than the original.
 
 
 #### stepped input prediction
