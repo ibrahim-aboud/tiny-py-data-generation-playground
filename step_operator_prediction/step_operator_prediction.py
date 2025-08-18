@@ -369,13 +369,13 @@ finally:
         if variable_states:
             for candidate in selected:
                 op, col, line = candidate
-                if (is_deterministic(code_snippet,col,line,operator_dictionary.get(op),variable_states,highlighted_line_nb,sample_line,stack)):
-                    modified_code = replace_operator_with_symbol(code_snippet,col,line,'?')
-                    modified_code_lines = modified_code.split('\n')
-                    modified_code_lines[highlighted_line_nb] = "@" + modified_code_lines[highlighted_line_nb] + "$" + variable_states
-                    modified_code = '\n'.join(modified_code_lines)
-                    modified_code = modified_code + "\n# operator?" + op
-                    code_snippets.append(modified_code)
+                #if (is_deterministic(code_snippet,col,line,operator_dictionary.get(op),variable_states,highlighted_line_nb,sample_line,stack)):
+                modified_code = replace_operator_with_symbol(code_snippet,col,line,'?')
+                modified_code_lines = modified_code.split('\n')
+                modified_code_lines[highlighted_line_nb] = "@" + modified_code_lines[highlighted_line_nb] + "$" + variable_states
+                modified_code = '\n'.join(modified_code_lines)
+                modified_code = modified_code + "\n# operator?" + op
+                code_snippets.append(modified_code)
 
 
         total_snippets.extend(code_snippets)
