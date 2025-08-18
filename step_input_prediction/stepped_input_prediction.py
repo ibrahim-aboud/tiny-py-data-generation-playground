@@ -60,30 +60,45 @@ finally:
 
 
 def collect_candidates(tree):
-    """Collect numeric values (positive and negative) from assignments and binary ops."""
+    """
+    Collect numeric values (positive and negative) from assignments and binary ops,
+    along with the corresponding affected variable names.
+    """
     candidates = []
+    variables = []
+
     for stmt in tree.body:
         if isinstance(stmt, ast.Assign):
             val = stmt.value
+            # Assignment target(s) — handle single and tuple targets
+            if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+                target_var = stmt.targets[0].id
+            else:
+                target_var = None  # you can extend logic if you want tuple unpacking, etc.
 
             # Case: x = constant
             if isinstance(val, ast.Constant) and isinstance(val.value, (int, float)):
                 candidates.append(val)
+                variables.append(target_var)
 
             # Case: x = negative constant
             elif isinstance(val, ast.UnaryOp) and isinstance(val.op, ast.USub) and isinstance(val.operand, ast.Constant):
                 candidates.append(val)
+                variables.append(target_var)
 
             # Case: binary operations
             elif isinstance(val, ast.BinOp):
                 for side in (val.left, val.right):
                     if isinstance(side, ast.Constant) and isinstance(side.value, (int, float)):
                         candidates.append(side)
+                        variables.append(target_var)
                     elif isinstance(side, ast.UnaryOp) and isinstance(side.op, ast.USub) and isinstance(side.operand, ast.Constant):
                         candidates.append(side)
+                        variables.append(target_var)
         else:
             break
-    return candidates
+
+    return candidates, variables
 
 def mask_node(tree, target_node):
     """Replace target_node with a bare name '?'."""
@@ -99,7 +114,7 @@ def mask_node(tree, target_node):
 def mask_all_values_ast(code):
     """Return list of (masked_code, original_value, line_number) for each numeric candidate."""
     tree = ast.parse(code)
-    candidates = collect_candidates(tree)
+    candidates, _ = collect_candidates(tree)
     results = []
 
     for idx, candidate in enumerate(candidates):
@@ -107,7 +122,7 @@ def mask_all_values_ast(code):
         tree_copy = ast.parse(code)
 
         # Locate the same candidate in the fresh tree
-        fresh_candidates = collect_candidates(tree_copy)
+        fresh_candidates, affected_variables = collect_candidates(tree_copy)
         target_node = fresh_candidates[idx]
 
         # Extract value
@@ -125,7 +140,7 @@ def mask_all_values_ast(code):
         mask_node(tree_copy, target_node)
         masked_code = ast.unparse(tree_copy)
 
-        results.append((masked_code, original_value, line_number))
+        results.append((masked_code, original_value, line_number, affected_variables[idx]))
 
     return results
 
@@ -197,6 +212,25 @@ def get_variable_values_from_code_step(code_snippet,step,stack):
         return trace[0],trace[1]
     else:
         return '',0
+    
+def mask_variable_value(variable_states, var_name):
+    """
+    Given a state string like 'a?2;b?5;c?9' and a variable name,
+    replace the value of that variable with '~'.
+    """
+    parts = variable_states.split(";")
+    masked_parts = []
+    
+    for part in parts:
+        if "?" not in part:
+            continue
+        var, val = part.split("?", 1)
+        if var == var_name:
+            masked_parts.append(f"{var}?~")
+        else:
+            masked_parts.append(part)
+    
+    return ";".join(masked_parts)
 
 def generate_stepped_input_prediction_snippet(code_snippet,step_limit=10,sampling_limit=0):
 
@@ -208,7 +242,7 @@ def generate_stepped_input_prediction_snippet(code_snippet,step_limit=10,samplin
     if sampling_limit != 0 and sampling_limit<len(masked_list):
         masked_list = random.sample(masked_list)
     results = []
-    for masked_code, original_value, line_num in masked_list:
+    for masked_code, original_value, line_num, target_var in masked_list:
         if line_num == count:
             continue
         possible_steps = sample_unique(line_num,count, step_limit)
@@ -216,7 +250,7 @@ def generate_stepped_input_prediction_snippet(code_snippet,step_limit=10,samplin
             variable_states, highlighted_line_nb = get_variable_values_from_code_step(code_snippet,step,stack)
             if variable_states:
                 masked_code_lines = masked_code.split('\n')
-                masked_code_lines[highlighted_line_nb] ="@" + masked_code_lines[highlighted_line_nb] + "$" + variable_states
+                masked_code_lines[highlighted_line_nb] ="@" + masked_code_lines[highlighted_line_nb] + "$" + mask_variable_value(variable_states,target_var)
                 masked_code_final = '\n'.join(masked_code_lines)
                 masked_code_final = masked_code_final+ "\n# input?" + str(original_value)
                 results.append(masked_code_final)
