@@ -23,14 +23,41 @@ step operator prediction works as follows :
 - sampling_limit = 0 means that it freezes at every step
 - at a given frozen step, the states of variables are generated at that moment
 - for every frozen step, we try masking M possible operators, one at a time (M is set by the "limit" hyperparameter)
-- for each masking, we check whether the operator guessing is deterministic based on the variable states generated previously
-- every validated masking generates one training snippet
+- every validated masking generates one training snippet ( that can be non-deterministic)
 - In a perfect world, sampling_limit*limit examples can be squeezed out of every pure snippets
-- But due to many of these examples being non deterministic, this number becomes more like an upper bound than an exact estimation
+- But due to many of these examples not having operators to replace "only assignements for example", this number becomes more like an upper bound than an exact estimation
 - **REMEMBER TO SET THE sampling_limit VARIABLE TO A WEAK VALUE FOR DATASETS INCLUDING LOOPS (ex: 3 to 5), TO AVOID GENERATING A TRAINING SET THAT IS ORDERS OF MAGNITUDE BIGGER THAN THE ORIGINAL PURE DATASET, unless done on purpose**
-- the function that filters non-deterministic questions is not perfect, it offers 'weak conditions' to remove as much 'bad' snippets as possible.
-- the errored_snippets_are_non_deterministic flag is used to whether ignore or not any code snippets that might raise exeuction errors if the masked operator is replaced with an operator other than the original.
-- different_step_answers_are_non_deterministic flag is used to whether ignore or not any code snippet whose execution might not end in the same step if the masked operator is replaced with an operator other than the original.
+- (in case we wanted to eliminate non-deterministic cases) the function that filters non-deterministic questions is not perfect, it offers 'weak conditions' to remove as much 'bad' snippets as possible.
+- (in case we wanted to eliminate non-deterministic cases) the errored_snippets_are_non_deterministic flag is used to whether ignore or not any code snippets that might raise exeuction errors if the masked operator is replaced with an operator other than the original.
+- (in case we wanted to eliminate non-deterministic cases) different_step_answers_are_non_deterministic flag is used to whether ignore or not any code snippet whose execution might not end in the same step if the masked operator is replaced with an operator other than the original.
+
+quick summary on how generating training data works : 
+1. capture a snippet
+2. execute the snippet and freeze it at a random step
+3. save the variable states in that step
+4. pick a random operator that can be masked 
+5. now that we have the 3 components (snippet, step, operator) we build one training example by :
+	1. highlighting the step by encapsulating the line with @ and $
+	2. contatenate the variable states at the end of that same highlighted line
+	3. replace the picked operator with a "?"
+	4. at the end of the snippet add this comment "# operator?X" replacing X with the original masked operator
+
+quick summary on the evaluation process : 
+for every evaluation snippet, we do the following : 
+- feed it to the model "without the label ofc" and store the predicted operator, let's call it "Z"
+- extract the variable states from the snippet with regex magic "original_states"
+- extract the highlighted line index "also with regex magic", stored in "lineno" variable
+- transform the evaluation snippet into an executable snippet by doing the following steps
+	- replace the "?" with Z
+	- remove the variable states concatenated at the end of the highlighted line
+	- remove @ and $ from the highlighted line
+	- hide the comment at the end "# operator?X"
+- now, given this new executable snippet "Modified_snippet", the old variable states "original_states" and the line index of the highlighted line "lineno" execute this evaluation algorithm
+	- initialize an empty list_of_states
+	- execute the snippet "modified_snippet"
+		- meanwhile the execution, everytime we reach a line with an index equal to "lineno" we append the corresponding states to the list_of_states
+	- if original_states is equal to one of the elements of the list_of_states, then we consider the answer as positive "correct"
+	- if original_states is not equal to any of the elements of the list_of_states, then we consider the answer as negative "incorrect"
 
 
 #### stepped input prediction
@@ -44,8 +71,30 @@ stepped input prediction works as follows :
 - n is the number of possible maskings of the different values all across the snippet (specified by the hyperparameter : sampling_limit)
 - m is the number of possible steps that we can stop at during the exeuction of the code snippet (specified by the hyperparameter : step_limit)
 - we said ideal since many code snippet examples are skipped for not having assignements at the beginning for example ..etc
-- there has not been any determinism filtering mechanism created so far, simply because we have not found a scenario where non-determinism can occur in such examples
+- ps : if we masked a value that is part of an assignement to a variable "a" for example, then the state of "a" must be masked inorder not to make the training example too easy
 - **REMEMBER TO SET THE step_limit VARIABLE TO A WEAK VALUE FOR DATASETS INCLUDING LOOPS (ex: 3 to 5), TO AVOID GENERATING A TRAINING SET THAT IS ORDERS OF MAGNITUDE BIGGER THAN THE ORIGINAL PURE DATASET, unless done on purpose**
+
+training data generation process : 
+- take the pure snippet
+- execute till a specific step and save the line index of the coresponding step
+- save the variable states at that step
+- pick a random initialisation line
+- mask one number in that initialisation by replacing it with '?' -save the masked value before masking of course-
+- save the corresponding variable name as well (so in : "a = 12 + ?" the corresponding variable is 'a')
+- highlight the step at which we stopped executing "encapsulating with @ and $"
+- concatenate that step with the variable states "but this time the state of the corresponding variable is masked too, using '~' "
+- and finally append this comment at the end "# input?X" X being the masked value
+
+evaluation process: 
+- from the evaluation sample capture the following info : 
+	- the value that the model predicted
+	- the highlighted line index
+	- the original state of the variables corresponding to the the highlighted line
+	- a modified version of the snippet where the input is replaced with what the model has predicted
+- now execute the modified version of the snippet
+- everytime the debugger passes by the highlighted line, append the state of the variables in a states list
+- after the execution check whether the original variable states are equal to at least one of the elements in the list "ignoring the masked variable's state in the process"
+- if at least one match is found, then the model has a correct answer, else, the answer is false
 
 ## some extra stats
 
